@@ -1,38 +1,195 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teste de OCR - Documentos</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f4f4f9; color: #333; }
-        h1 { text-align: center; color: #2c3e50; }
-        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .upload-area { border: 2px dashed #cbd5e0; border-radius: 8px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 20px; }
-        .upload-area:hover { border-color: #4299e1; background-color: #ebf8ff; }
-        .upload-area p { margin: 0; color: #718096; font-size: 1.1rem; }
-        #preview { max-width: 100%; max-height: 300px; margin-top: 20px; border-radius: 8px; display: none; margin-left: auto; margin-right: auto; }
-        button { width: 100%; background-color: #4299e1; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: background 0.2s; }
-        button:hover { background-color: #3182ce; }
-        button:disabled { background-color: #a0aec0; cursor: not-allowed; }
-        #result { margin-top: 20px; background: #2d3748; color: #a0aec0; padding: 15px; border-radius: 8px; font-family: monospace; white-space: pre-wrap; display: none; }
-        .loading { display: none; text-align: center; margin-top: 10px; font-weight: bold; color: #4299e1; }
-        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; margin-bottom: 10px; font-weight: bold; }
-        .badge-pdf { background-color: #fed7d7; color: #c53030; }
-        .badge-img { background-color: #c6f6d5; color: #2f855a; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .upload-area {
+            border: 2px dashed #cbd5e0;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover {
+            border-color: #4299e1;
+            background-color: #ebf8ff;
+        }
+
+        .upload-area p {
+            margin: 0;
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        #preview {
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 20px;
+            border-radius: 8px;
+            display: none;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        button {
+            width: 100%;
+            background-color: #4299e1;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #3182ce;
+        }
+
+        button:disabled {
+            background-color: #a0aec0;
+            cursor: not-allowed;
+        }
+
+        #resultArea {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .field-card {
+            background: #ebf8ff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #4299e1;
+        }
+
+        .field-card label {
+            display: block;
+            font-size: 0.85rem;
+            color: #4a5568;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .field-card .value {
+            font-size: 1.1rem;
+            color: #2d3748;
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+        .field-card .value.empty {
+            color: #a0aec0;
+            font-style: italic;
+            font-weight: normal;
+            font-size: 0.9rem;
+        }
+
+        .field-card.full-width {
+            grid-column: span 2;
+        }
+
+        .error-box {
+            background-color: #fff5f5;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #fc8181;
+            text-align: center;
+        }
+
+        .tag {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        @media (max-width: 600px) {
+            .result-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .field-card.full-width {
+                grid-column: span 1;
+            }
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #4299e1;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .badge-pdf {
+            background-color: #fed7d7;
+            color: #c53030;
+        }
+
+        .badge-img {
+            background-color: #c6f6d5;
+            color: #2f855a;
+        }
     </style>
 </head>
+
 <body>
 
     <h1>📄 Testador de API de Documentos</h1>
-    
+
     <div class="card">
         <div class="upload-area" onclick="document.getElementById('fileInput').click()">
             <p>📁 Clique ou arraste um arquivo aqui</p>
             <p style="font-size: 0.9rem; margin-top: 5px;">(Aceita Imagens ou PDF)</p>
         </div>
         <input type="file" id="fileInput" hidden accept="image/*,application/pdf">
-        
+
         <div id="fileInfo" style="text-align: center; margin-bottom: 15px; display: none;">
             <span id="badgeType" class="badge"></span>
             <span id="fileName"></span>
@@ -41,17 +198,17 @@
         <img id="preview" />
 
         <button id="btnExtract" onclick="processFile()" disabled>🚀 Extrair Dados</button>
-        
+
         <div class="loading" id="loading">⌛ Processando... (Isso pode levar alguns segundos)</div>
 
-        <pre id="result"></pre>
+        <div id="resultArea"></div>
     </div>
 
     <script>
         const fileInput = document.getElementById('fileInput');
         const preview = document.getElementById('preview');
         const btnExtract = document.getElementById('btnExtract');
-        const resultDiv = document.getElementById('result');
+        const resultArea = document.getElementById('resultArea');
         const loadingDiv = document.getElementById('loading');
         const fileInfo = document.getElementById('fileInfo');
         const badgeType = document.getElementById('badgeType');
@@ -68,7 +225,7 @@
             resultDiv.style.display = 'none';
 
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = function (e) {
                 base64String = e.target.result;
                 btnExtract.disabled = false;
 
@@ -91,13 +248,12 @@
 
             loadingDiv.style.display = 'block';
             btnExtract.disabled = true;
-            resultDiv.style.display = 'none';
-            resultDiv.textContent = '';
+            resultArea.style.display = 'none';
+            resultArea.innerHTML = '';
 
             try {
-                // Determine API URL (assumes same host if running there, or hardcoded for local test)
-                const apiUrl = window.location.origin.includes('localhost') 
-                    ? 'http://localhost:3000/extract' 
+                const apiUrl = window.location.origin.includes('localhost')
+                    ? 'http://localhost:3000/extract'
                     : '/extract';
 
                 const response = await fetch(apiUrl, {
@@ -107,25 +263,61 @@
                 });
 
                 const data = await response.json();
-                
-                resultDiv.style.display = 'block';
-                resultDiv.textContent = JSON.stringify(data, null, 2);
-                
-                if (data.success) {
-                    resultDiv.style.color = '#68d391'; // Greenish for success
-                } else {
-                    resultDiv.style.color = '#fc8181'; // Red for error
-                }
+
+                renderResult(data);
 
             } catch (error) {
-                resultDiv.style.display = 'block';
-                resultDiv.style.color = 'red';
-                resultDiv.textContent = 'Erro na requisição: ' + error.message;
+                resultArea.style.display = 'block';
+                resultArea.innerHTML = `<div class="error-box">❌ Erro na requisição: ${error.message}</div>`;
             } finally {
                 loadingDiv.style.display = 'none';
                 btnExtract.disabled = false;
             }
         }
+
+        function renderResult(data) {
+            resultArea.style.display = 'block';
+
+            if (!data.success) {
+                resultArea.innerHTML = `<div class="error-box">⚠️ ${data.error || 'Falha ao processar.'}</div>`;
+                return;
+            }
+
+            const fields = data.extracted_fields || {};
+
+            let html = `
+                <div class="result-grid">
+                    <div class="field-card">
+                        <label>👤 Nome Provável</label>
+                        <div class="value">${fields.nome_provavel || '<span class="empty">Não encontrado</span>'}</div>
+                    </div>
+                    <div class="field-card">
+                        <label>🔢 CPF</label>
+                        <div class="value">${fields.cpf || '<span class="empty">Não encontrado</span>'}</div>
+                    </div>
+                    <div class="field-card">
+                        <label>🎂 Data Nascimento</label>
+                        <div class="value">${fields.data_nascimento || '<span class="empty">Não encontrado</span>'}</div>
+                    </div>
+                    <div class="field-card">
+                        <label>🆔 RG / Registro</label>
+                        <div class="value">${fields.rg || '<span class="empty">Não encontrado</span>'}</div>
+                    </div>
+                    <div class="field-card full-width">
+                        <label>📄 Tipo Detectado</label>
+                        <div class="value tag">${fields.tipo_documento || 'DESCONHECIDO'} <small>(${data.method})</small></div>
+                    </div>
+                </div>
+
+                <details style="margin-top: 20px; color: #718096; cursor: pointer;">
+                    <summary>Ver JSON Bruto (Debug)</summary>
+                    <pre style="background: #2d3748; color: #a0aec0; padding: 10px; border-radius: 5px; margin-top: 5px; overflow-x: auto;">${JSON.stringify(data, null, 2)}</pre>
+                </details>
+            `;
+
+            resultArea.innerHTML = html;
+        }
     </script>
 </body>
+
 </html>
