@@ -45,17 +45,28 @@ async def extract_data(request: ExtractRequest):
         
         # --- MODO TURBO: GEMINI AI (Se tiver chave configurada) ---
         gemini_key = os.getenv("GEMINI_API_KEY")
+        print(f"[DEBUG] GEMINI_API_KEY detectada: {'Sim' if gemini_key else 'Não'}")
+        
         if gemini_key:
-            print("Usando Engine: Google Gemini Flash")
-            gemini_result = extract_with_gemini(image_bytes, gemini_key)
-            if gemini_result:
-                return {
-                    "success": True,
-                    "extracted_fields": gemini_result,
-                    "method": "GOOGLE_GEMINI_FLASH_AI"
-                }
+            print(f"[INFO] Usando Engine: Google Gemini Flash (chave termina em ...{gemini_key[-4:]})")
+            try:
+                gemini_result = extract_with_gemini(image_bytes, gemini_key)
+                if gemini_result:
+                    print("[SUCCESS] Gemini extraiu dados com sucesso!")
+                    return {
+                        "success": True,
+                        "extracted_fields": gemini_result,
+                        "method": "GOOGLE_GEMINI_FLASH_AI"
+                    }
+                else:
+                    print("[WARNING] Gemini retornou None (parsing/timeout?)")
+            except Exception as gemini_error:
+                print(f"[ERROR] Gemini Exception: {gemini_error}")
+            
             # Se falhar no Gemini, cai pro fallback local
-            print("Gemini falhou, caindo para Tesseract local...")
+            print("[INFO] Caindo para Tesseract local...")
+        else:
+            print("[INFO] GEMINI_API_KEY não configurada. Usando Tesseract local.")
 
         # --- MODO LOCAL: TESSERACT + OPENCV ---
         # Obter versoes da imagem
