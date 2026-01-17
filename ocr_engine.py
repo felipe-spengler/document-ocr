@@ -27,10 +27,13 @@ def parse_document_text(text):
     }
 
     # --- 1. Tipo ---
+    # CNH tem muitos termos especificos
     if any(x in clean_text for x in ['HABILITACAO', 'CONDUTOR', 'CNH', 'DRIVER', 'PERMISO', 'PERMISSION']):
         result['tipo_documento'] = 'CNH'
-    elif 'NACIONAL' in clean_text and 'TERRITORIO' in clean_text:
-        result['tipo_documento'] = 'CNH' # Carteira Nacional validade em todo Territorio
+    elif 'NACIONAL' in clean_text and ('TERRITORIO' in clean_text or 'TRANSITO' in clean_text):
+        result['tipo_documento'] = 'CNH'
+    elif 'MINISTERIO' in clean_text and ('INFRAESTRUTURA' in clean_text or 'CIDADES' in clean_text):
+        result['tipo_documento'] = 'CNH'
     elif any(x in clean_text for x in ['IDENTIDADE', 'SSP', 'SECRETARIA', 'REGISTRO GERAL']):
         result['tipo_documento'] = 'RG'
 
@@ -40,14 +43,18 @@ def parse_document_text(text):
     for i, line in enumerate(lines):
         upper = line.upper()
         if 'CPF' in upper:
-            # Estrategia 1: CPF na mesma linha (strip label)
             line_content = upper.replace('CPF', '').strip()
+            # Tenta pegar apenas digitos caso a formatacao esteja ruim
+            nums_only = re.sub(r'\D', '', line_content)
+            if len(nums_only) == 11:
+                result['cpf'] = format_cpf(nums_only)
+                break
+                
             match = re.search(cpf_pattern, line_content)
             if match:
                 result['cpf'] = format_cpf(match.group(1))
                 break
             
-            # Estrategia 2: CPF na proxima linha
             if i + 1 < len(lines):
                 next_line = lines[i+1].upper()
                 match = re.search(cpf_pattern, next_line)
@@ -55,60 +62,99 @@ def parse_document_text(text):
                     result['cpf'] = format_cpf(match.group(1))
                     break
                     
-    # Fallback CPF global
     if not result['cpf']:
         matches = re.findall(cpf_pattern, clean_text)
         for m in matches:
-             if '.' in m or '-' in m: # Exige pontuacao no fallback para evitar lixo
+             if '.' in m or '-' in m: 
                  result['cpf'] = format_cpf(m)
                  break
 
     # --- 3. Data Nascimento ---
+    # Suporte a dd/mm/aaaa e ddmmaaaa (ocr erro)
     date_pattern = r'\d{2}/\d{2}/\d{4}'
+    date_pattern_loose = r'\d{8}'
+    
     for i, line in enumerate(lines):
         upper = line.upper()
         if 'NASCIMENTO' in upper or 'NASC' in upper:
+             # Tenta padrao com barras
              d = re.search(date_pattern, parse_date_typos(upper)) 
              if d:
                  result['data_nascimento'] = d.group(0)
                  break
+             
+             # Tenta padrao sem barras (ex: 19091981)
+             d_loose = re.search(date_pattern_loose, upper)
+             if d_loose:
+                 raw = d_loose.group(0)
+                 # Formata
+                 result['data_nascimento'] = f"{raw[:2]}/{raw[2:4]}/{raw[4:]}"
+                 break
+                 
              if i + 1 < len(lines):
-                 d2 = re.search(date_pattern, parse_date_typos(lines[i+1].upper()))
+                 next_l = parse_date_typos(lines[i+1].upper())
+                 d2 = re.search(date_pattern, next_l)
                  if d2:
                      result['data_nascimento'] = d2.group(0)
+                     break
+                 d2_loose = re.search(date_pattern_loose, next_l)
+                 if d2_loose:
+                     raw = d2_loose.group(0)
+                     result['data_nascimento'] = f"{raw[:2]}/{raw[2:4]}/{raw[4:]}"
                      break
     
     # --- 4. RG ---
     rg_keywords = ['RG', 'REGISTRO', 'IDENTIDADE', 'DOC. IDENT']
-    for i, line in enumerate(lines):
-        upper = line.upper()
-        # Se contem keyword do RG e NAO contem CPF (para nao confundir labels)
-        if any(k in upper for k in rg_keywords) and 'CPF' not in upper:
-             nums = re.findall(r'\b\d{5,12}\b', upper)
-             for num in nums:
-                 if not is_same_number(num, result['cpf']):
-                     result['rg'] = num
-                     break
-             if result['rg']: break
-             
-             # Proxima linha
-             if i + 1 < len(lines):
-                 nums_next = re.findall(r'\b\d{5,12}\b', lines[i+1])
-                 for num in nums_next:
-                     if not is_same_number(num, result['cpf']):
+    
+    # Prioridade CNH: Campo DOC IDENTIDADE ORG EMISSOR
+    doc_ident_idx = -1
+    for idx, l in enumerate(lines):
+        if 'DOC' in l.upper() and 'IDENTIDADE' in l.upper():
+            doc_ident_idx = idx
+            break
+            
+    if doc_ident_idx != -1:
+        # Tenta achar o numero nas proximas 2 linhas
+        for offset in [0, 1, 2]:
+            if doc_ident_idx + offset >= len(lines): break
+            line_rg = lines[doc_ident_idx + offset].upper()
+            # Procura sequencia de numeros > 5 digitos
+            candidates = re.findall(r'\b\d{5,12}\b', line_rg)
+            for cand in candidates:
+                if not is_same_number(cand, result['cpf']) and not is_date_loose(cand):
+                    result['rg'] = cand
+                    break
+            if result['rg']: break
+
+    # Se nao achou pela label especifica, vai no generico
+    if not result['rg']:
+        for i, line in enumerate(lines):
+            upper = line.upper()
+            if any(k in upper for k in rg_keywords) and 'CPF' not in upper:
+                 nums = re.findall(r'\b\d{5,12}\b', upper)
+                 for num in nums:
+                     if not is_same_number(num, result['cpf']) and not is_date_loose(num):
                          result['rg'] = num
                          break
-             if result['rg']: break
-             
+                 if result['rg']: break
+                 
+                 if i + 1 < len(lines):
+                     nums_next = re.findall(r'\b\d{5,12}\b', lines[i+1])
+                     for num in nums_next:
+                         if not is_same_number(num, result['cpf']) and not is_date_loose(num):
+                             result['rg'] = num
+                             break
+                 if result['rg']: break
+                 
     if not result['rg']:
-         # Fallback agressivo: numeros soltos grandes que nao sejam data nem cpf
+         # Fallback agressivo
          candidates = re.findall(r'\b\d{7,12}\b', clean_text)
          for c in candidates:
-             if not is_same_number(c, result['cpf']) and not is_date(c):
+             if not is_same_number(c, result['cpf']) and not is_date_loose(c):
                  result['rg'] = c
                  break
 
-    # --- 5. Nome (Lógica Melhorada) ---
+    # --- 5. Nome (Mantem logica boa) ---
     headers_to_strip = ['NOME SOCIAL', 'NOME E SOBRENOME', 'NOME', 'SOBRENOME', 'RNTRC', 'ASSINATURA']
     name_found = False
     
@@ -116,23 +162,20 @@ def parse_document_text(text):
         upper = line.upper()
         
         if 'NOME' in upper:
-             # >>>> Tenta PRIMEIRO a proxima linha (Padrao CNH) <<<<
              if i + 1 < len(lines):
                  cand = lines[i+1].upper()
                  cand_clean = re.sub(r'[^A-Z\s]', '', cand).strip()
-                 # Verifica se é um nome válido
                  if is_valid_name_simple(cand_clean):
                      result['nome_provavel'] = cand_clean
                      name_found = True
                      break
 
-             # Se nao deu, tenta a mesma linha (limpando o header)
              cleaned_line = upper
              for h in headers_to_strip:
                  cleaned_line = cleaned_line.replace(h, '')
              
              cleaned_line = cleaned_line.strip()
-             cleaned_line = re.sub(r'[^A-Z\s]', '', cleaned_line) # Tira lixo
+             cleaned_line = re.sub(r'[^A-Z\s]', '', cleaned_line)
              
              if is_valid_name_simple(cleaned_line):
                  result['nome_provavel'] = cleaned_line
@@ -189,6 +232,10 @@ def is_valid_name_simple(text):
         
     return True
 
+def is_date_loose(s):
+    if len(s) == 8 and (s.startswith('19') or s.startswith('20') or s.endswith('19') or s.endswith('20')): return True
+    return False
+
 def process_image_pipeline(image_bytes):
     """
     Pipeline que retorna MÚLTIPLAS versões da imagem para tentar OCR.
@@ -200,30 +247,23 @@ def process_image_pipeline(image_bytes):
     if img is None:
         raise ValueError("Falha ao decodificar imagem")
 
-    # --- MELHORIA 1: UPSCALE (2x) ---
-    # Aumentar a resolução ajuda MUITO o Tesseract em letras pequenas
-    # Se a imagem for pequena (< 2000px de largura), dobra.
+    # --- MELHORIA 1: UPSCALE (Apenas se muito pequena) ---
     h, w = img.shape[:2]
-    if w < 2000:
+    # Se ja for HD (1000+), nao mexe, senao distorce letras no OCR.
+    if w < 1000:
         scale = 2.0
-        # Upscaling ajuda a definir bordas
         img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
 
     # 1. Grayscale (Básico)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    # 2. Binarização Otsu (Bom contraste global)
-    # Remove fundo cinza/verde uniforme
+    # 2. Otsu
     _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
-    # 3. Adaptive Threshold (Bom para sombras)
-    # Cuidado: pode gerar ruido se a imagem for muito nitida
+    # 3. Adaptive
     adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
                                      cv2.THRESH_BINARY, 11, 2)
     
-    # 4. Denoised
-    denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-
     return {
         "original": img, # Fallback final
         "gray": gray,    # Seguro
