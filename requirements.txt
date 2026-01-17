@@ -6,4 +6,4 @@ pytesseract
 numpy
 Pillow
 pdf2image
-google-genai
+google-generativeai

@@ -236,8 +236,7 @@ def is_date_loose(s):
     if len(s) == 8 and (s.startswith('19') or s.startswith('20') or s.endswith('19') or s.endswith('20')): return True
     return False
 
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 import os
 import json
 
@@ -247,7 +246,8 @@ def extract_with_gemini(image_bytes, api_key):
     Requer chave de API configurada.
     """
     try:
-        client = genai.Client(api_key=api_key)
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = """
         Analise este documento brasileiro (CNH ou RG) e extraia os dados em JSON estrito.
@@ -262,17 +262,12 @@ def extract_with_gemini(image_bytes, api_key):
         Exemplo: {"nome_provavel": "FULANO", "cpf": "123.456.789-00", "data_nascimento": "01/01/1990", "rg": "123456789", "tipo_documento": "CNH"}
         """
         
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=[
-                types.Part.from_bytes(
-                    data=image_bytes,
-                    mime_type='image/png'
-                ),
-                prompt
-            ]
-        )
+        # Converter bytes para PIL Image (Gemini aceita)
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(image_bytes))
         
+        response = model.generate_content([prompt, img])
         text = response.text.strip()
         
         # Limpar markdown se houver
