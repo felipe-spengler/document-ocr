@@ -30,9 +30,7 @@ app.mount("/static", StaticFiles(directory="public"), name="static")
 def health_check():
     return {"status": "Online", "backend": "Python/OpenCV"}
 
-@app.get("/")
-def read_root():
-    return parse_document_text("") # Só pra testar import, mas o frontend estatico vai cobrir a raiz se configurarmos redirect ou deixar o uvicorn servir
+
 
 @app.post("/extract")
 async def extract_data(request: ExtractRequest):
