@@ -4,319 +4,365 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teste de OCR - Documentos</title>
+    <title>OCR Document Extractor - AI Powered</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f4f4f9;
-            color: #333;
-        }
-
-        h1 {
-            text-align: center;
-            color: #2c3e50;
-        }
-
-        .card {
-            background: white;
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .upload-area {
-            border: 2px dashed #cbd5e0;
-            border-radius: 8px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 20px;
-        }
-
-        .upload-area:hover {
-            border-color: #4299e1;
-            background-color: #ebf8ff;
-        }
-
-        .upload-area p {
+        * {
             margin: 0;
-            color: #718096;
-            font-size: 1.1rem;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        #preview {
-            max-width: 100%;
-            max-height: 300px;
-            margin-top: 20px;
-            border-radius: 8px;
-            display: none;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        button {
-            width: 100%;
-            background-color: #4299e1;
-            color: white;
-            border: none;
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background-color: #3182ce;
-        }
-
-        button:disabled {
-            background-color: #a0aec0;
-            cursor: not-allowed;
-        }
-
-        #resultArea {
-            margin-top: 20px;
-            display: none;
-        }
-
-        .result-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-
-        .field-card {
-            background: #ebf8ff;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #4299e1;
-        }
-
-        .field-card label {
-            display: block;
-            font-size: 0.85rem;
-            color: #4a5568;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-        }
-
-        .field-card .value {
-            font-size: 1.1rem;
-            color: #2d3748;
-            font-weight: 600;
-            word-break: break-word;
-        }
-
-        .field-card .value.empty {
-            color: #a0aec0;
-            font-style: italic;
-            font-weight: normal;
-            font-size: 0.9rem;
-        }
-
-        .field-card.full-width {
-            grid-column: span 2;
-        }
-
-        .error-box {
-            background-color: #fff5f5;
-            color: #c53030;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #fc8181;
-            text-align: center;
-        }
-
-        .tag {
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            padding: 20px;
         }
 
-        @media (max-width: 600px) {
-            .result-grid {
-                grid-template-columns: 1fr;
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
             }
 
-            .field-card.full-width {
-                grid-column: span 1;
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
         }
 
-        .loading {
-            display: none;
+        .header {
             text-align: center;
-            margin-top: 10px;
-            font-weight: bold;
-            color: #4299e1;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #64748b;
+            font-size: 14px;
         }
 
         .badge {
             display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            margin-bottom: 10px;
-            font-weight: bold;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 12px;
+            animation: pulse 2s infinite;
         }
 
-        .badge-pdf {
-            background-color: #fed7d7;
-            color: #c53030;
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
         }
 
-        .badge-img {
-            background-color: #c6f6d5;
-            color: #2f855a;
+        .upload-area {
+            border: 3px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 24px;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result {
+            margin-top: 32px;
+            padding: 24px;
+            background: linear-gradient(135deg, #f6f8fb 0%, #e9ecef 100%);
+            border-radius: 16px;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .result h3 {
+            color: #1e293b;
+            margin-bottom: 16px;
+            font-size: 20px;
+        }
+
+        .field {
+            background: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .field-label {
+            font-weight: 600;
+            color: #475569;
+            font-size: 14px;
+        }
+
+        .field-value {
+            color: #1e293b;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            margin-top: 16px;
+        }
+
+        .method-gemini {
+            background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+            color: white;
+        }
+
+        .method-python {
+            background: #fbbf24;
+            color: #78350f;
+        }
+
+        .loader {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
 
 <body>
-
-    <h1>📄 Testador de API de Documentos</h1>
-
-    <div class="card">
-        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-            <p>📁 Clique ou arraste um arquivo aqui</p>
-            <p style="font-size: 0.9rem; margin-top: 5px;">(Aceita Imagens ou PDF)</p>
-        </div>
-        <input type="file" id="fileInput" hidden accept="image/*,application/pdf">
-
-        <div id="fileInfo" style="text-align: center; margin-bottom: 15px; display: none;">
-            <span id="badgeType" class="badge"></span>
-            <span id="fileName"></span>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 OCR Document Extractor</h1>
+            <p>Extração inteligente de documentos brasileiros</p>
+            <span class="badge">⚡ Powered by Gemini AI</span>
         </div>
 
-        <img id="preview" />
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📄</div>
+            <p style="font-weight: 600; color: #1e293b; margin-bottom: 8px;">Arraste sua CNH ou RG aqui</p>
+            <p style="color: #64748b; font-size: 14px;">ou clique para selecionar</p>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
 
-        <button id="btnExtract" onclick="processFile()" disabled>🚀 Extrair Dados</button>
+        <button id="extractBtn" disabled>Extrair Dados</button>
 
-        <div class="loading" id="loading">⌛ Processando... (Isso pode levar alguns segundos)</div>
+        <div class="loader" id="loader"></div>
 
-        <div id="resultArea"></div>
+        <div class="result" id="result">
+            <h3>✨ Dados Extraídos</h3>
+            <div id="resultContent"></div>
+        </div>
     </div>
 
     <script>
+        const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
-        const preview = document.getElementById('preview');
-        const btnExtract = document.getElementById('btnExtract');
-        const resultArea = document.getElementById('resultArea');
-        const loadingDiv = document.getElementById('loading');
-        const fileInfo = document.getElementById('fileInfo');
-        const badgeType = document.getElementById('badgeType');
-        const fileName = document.getElementById('fileName');
+        const extractBtn = document.getElementById('extractBtn');
+        const loader = document.getElementById('loader');
+        const result = document.getElementById('result');
+        const resultContent = document.getElementById('resultContent');
 
-        let base64String = "";
+        let selectedFile = null;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
 
         fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            fileName.textContent = file.name;
-            fileInfo.style.display = 'block';
-            resultArea.style.display = 'none';
-
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                base64String = e.target.result;
-                btnExtract.disabled = false;
-
-                if (file.type.includes('pdf')) {
-                    preview.style.display = 'none';
-                    badgeType.textContent = "PDF";
-                    badgeType.className = "badge badge-pdf";
-                } else {
-                    preview.src = base64String;
-                    preview.style.display = 'block';
-                    badgeType.textContent = "IMAGEM";
-                    badgeType.className = "badge badge-img";
-                }
-            };
-            reader.readAsDataURL(file);
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                extractBtn.disabled = false;
+                uploadArea.innerHTML = `<div class="upload-icon">✅</div><p style="font-weight: 600; color: #667eea;">${selectedFile.name}</p>`;
+            }
         });
 
-        async function processFile() {
-            if (!base64String) return;
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
 
-            loadingDiv.style.display = 'block';
-            btnExtract.disabled = true;
-            resultArea.style.display = 'none';
-            resultArea.innerHTML = '';
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
 
-            try {
-                const apiUrl = window.location.origin.includes('localhost')
-                    ? 'http://localhost:3000/extract'
-                    : '/extract';
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64String })
-                });
-
-                const data = await response.json();
-
-                renderResult(data);
-
-            } catch (error) {
-                resultArea.style.display = 'block';
-                resultArea.innerHTML = `<div class="error-box">❌ Erro na requisição: ${error.message}</div>`;
-            } finally {
-                loadingDiv.style.display = 'none';
-                btnExtract.disabled = false;
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            selectedFile = e.dataTransfer.files[0];
+            if (selectedFile) {
+                extractBtn.disabled = false;
+                uploadArea.innerHTML = `<div class="upload-icon">✅</div><p style="font-weight: 600; color: #667eea;">${selectedFile.name}</p>`;
             }
-        }
+        });
 
-        function renderResult(data) {
-            resultArea.style.display = 'block';
+        extractBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
 
-            if (!data.success) {
-                resultArea.innerHTML = `<div class="error-box">⚠️ ${data.error || 'Falha ao processar.'}</div>`;
-                return;
-            }
+            extractBtn.disabled = true;
+            loader.style.display = 'block';
+            result.classList.remove('show');
 
-            const fields = data.extracted_fields || {};
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64 = e.target.result;
 
-            let html = `
-                <div class="result-grid">
-                    <div class="field-card">
-                        <label>👤 Nome Provável</label>
-                        <div class="value">${fields.nome_provavel || '<span class="empty">Não encontrado</span>'}</div>
-                    </div>
-                    <div class="field-card">
-                        <label>🔢 CPF</label>
-                        <div class="value">${fields.cpf || '<span class="empty">Não encontrado</span>'}</div>
-                    </div>
-                    <div class="field-card">
-                        <label>🎂 Data Nascimento</label>
-                        <div class="value">${fields.data_nascimento || '<span class="empty">Não encontrado</span>'}</div>
-                    </div>
-                    <div class="field-card">
-                        <label>🆔 RG / Registro</label>
-                        <div class="value">${fields.rg || '<span class="empty">Não encontrado</span>'}</div>
-                    </div>
-                    <div class="field-card full-width">
-                        <label>📄 Tipo Detectado</label>
-                        <div class="value tag">${fields.tipo_documento || 'DESCONHECIDO'} <small>(${data.method})</small></div>
-                    </div>
-                </div>
+                try {
+                    const response = await fetch('/extract', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: base64 })
+                    });
 
-                <details style="margin-top: 20px; color: #718096; cursor: pointer;">
-                    <summary>Ver JSON Bruto (Debug)</summary>
-                    <pre style="background: #2d3748; color: #a0aec0; padding: 10px; border-radius: 5px; margin-top: 5px; overflow-x: auto;">${JSON.stringify(data, null, 2)}</pre>
-                </details>
-            `;
+                    const data = await response.json();
+                    loader.style.display = 'none';
 
-            resultArea.innerHTML = html;
-        }
+                    if (data.success) {
+                        const fields = data.extracted_fields;
+                        const methodClass = data.method.includes('GEMINI') ? 'method-gemini' : 'method-python';
+                        const methodText = data.method.includes('GEMINI') ? '🤖 Gemini AI' : '🐍 Python OCR';
+
+                        resultContent.innerHTML = `
+                            <div class="field">
+                                <span class="field-label">Nome:</span>
+                                <span class="field-value">${fields.nome_provavel || 'Não encontrado'}</span>
+                            </div>
+                            <div class="field">
+                                <span class="field-label">CPF:</span>
+                                <span class="field-value">${fields.cpf || 'Não encontrado'}</span>
+                            </div>
+                            <div class="field">
+                                <span class="field-label">Data Nascimento:</span>
+                                <span class="field-value">${fields.data_nascimento || 'Não encontrado'}</span>
+                            </div>
+                            <div class="field">
+                                <span class="field-label">RG/Doc:</span>
+                                <span class="field-value">${fields.rg || 'Não encontrado'}</span>
+                            </div>
+                            <div class="field">
+                                <span class="field-label">Tipo:</span>
+                                <span class="field-value">${fields.tipo_documento}</span>
+                            </div>
+                            <span class="method-badge ${methodClass}">${methodText}</span>
+                        `;
+                        result.classList.add('show');
+                    } else {
+                        alert('Erro: ' + data.error);
+                    }
+                } catch (error) {
+                    loader.style.display = 'none';
+                    alert('Erro ao processar: ' + error.message);
+                }
+
+                extractBtn.disabled = false;
+            };
+
+            reader.readAsDataURL(selectedFile);
+        });
     </script>
 </body>
 
