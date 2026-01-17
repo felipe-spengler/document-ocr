@@ -1,13 +1,36 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import base64
 import io
 import pytesseract
 from PIL import Image
-from ocr_engine import process_image_pipeline, parse_document_text, extract_with_gemini
 import os
+from ocr_engine import process_image_pipeline, parse_document_text, extract_with_gemini
+
+app = FastAPI()
+
+# Configuração CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Esquema de Entrada
+class ExtractRequest(BaseModel):
+    image: str # Base64 string
+
+# Servir arquivos estáticos (Frontend)
+app.mount("/static", StaticFiles(directory="public"), name="static")
+
+@app.get("/status")
+def health_check():
+    return {"status": "Online", "backend": "Python/OpenCV/Gemini"}
 
 @app.post("/extract")
 async def extract_data(request: ExtractRequest):
@@ -50,8 +73,7 @@ async def extract_data(request: ExtractRequest):
             img_version = images[strategy]
             
             # Executar OCR
-            # psm 3 = fully automatic. psm 6 = block of text (as vezes melhor pra cartoes cortados)
-            # Vamos tentar psm 3 padrao.
+            # psm 3 = fully automatic. psm 6 = block of text
             text = pytesseract.image_to_string(img_version, lang='por', config='--psm 3')
             
             extracted = parse_document_text(text)
@@ -84,7 +106,7 @@ async def extract_data(request: ExtractRequest):
         return {
             "success": True,
             "extracted_fields": best_result,
-            "raw_text": last_text if len(last_text) < 500 else last_text[:500] + "...",
+            # "raw_text": last_text if len(last_text) < 500 else last_text[:500] + "...", 
             "method": "PYTHON_BEST_EFFORT"
         }
         
@@ -95,8 +117,6 @@ async def extract_data(request: ExtractRequest):
             "error": str(e)
         }
 
-# Truque para servir o index.html na raiz com FastAPI
-from fastapi.responses import FileResponse
 @app.get("/")
 async def serve_index():
     return FileResponse('public/index.html')
