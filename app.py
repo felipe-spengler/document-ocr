@@ -6,7 +6,7 @@ import base64
 import io
 import pytesseract
 from PIL import Image
-from ocr_engine import process_image_cv2, parse_document_text
+from ocr_engine import process_image_pipeline, parse_document_text
 
 app = FastAPI()
 
