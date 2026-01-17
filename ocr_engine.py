@@ -239,52 +239,45 @@ def is_date_loose(s):
 import google.generativeai as genai
 import os
 import json
+import base64
 
 def extract_with_gemini(image_bytes, api_key):
     """
     Usa o Gemini 1.5 Flash (Visão) para extrair dados com precisão humana.
-    Requer chave de API configurada.
     """
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
-        prompt = """
-        Analise este documento brasileiro (CNH ou RG) e extraia os dados em JSON estrito.
-        Campos requeridos:
-        - "nome_provavel": Nome completo (string).
-        - "cpf": Formato XXX.XXX.XXX-XX. Se não houver, use null.
-        - "data_nascimento": Formato DD/MM/AAAA (string).
-        - "rg": Documento de identidade em string (apenas números). Se for CNH, use o campo 'DOC IDENTIDADE'. Se não houver, use null.
-        - "tipo_documento": "CNH" ou "RG" (string).
+        # Criar parte da imagem
+        image_part = {
+            'mime_type': 'image/jpeg',
+            'data': base64.b64encode(image_bytes).decode('utf-8')
+        }
         
-        Retorne APENAS o JSON puro, sem markdown nem código.
-        Exemplo: {"nome_provavel": "FULANO", "cpf": "123.456.789-00", "data_nascimento": "01/01/1990", "rg": "123456789", "tipo_documento": "CNH"}
-        """
+        prompt = """Extraia os dados deste documento em JSON:
+{
+  "nome_provavel": "nome completo",
+  "cpf": "XXX.XXX.XXX-XX ou null",
+  "data_nascimento": "DD/MM/AAAA",
+  "rg": "apenas números ou null",
+  "tipo_documento": "CNH ou RG"
+}
+Retorne APENAS JSON válido, sem explicação."""
         
-        # Converter bytes para PIL Image (Gemini aceita)
-        from PIL import Image
-        import io
-        img = Image.open(io.BytesIO(image_bytes))
-        
-        response = model.generate_content([prompt, img])
+        response = model.generate_content([prompt, image_part])
         text = response.text.strip()
         
-        # Limpar markdown se houver
-        if text.startswith('```json'):
-             text = text[7:] 
-        if text.startswith('```'):
-             text = text[3:] 
-        if text.endswith('```'):
-             text = text[:-3]
-             
-        data = json.loads(text.strip())
-        return data
+        # Limpar markdown
+        text = text.replace('```json', '').replace('```', '').strip()
         
+        return json.loads(text)
+        
+    except json.JSONDecodeError as je:
+        print(f"[ERROR] Gemini retornou texto inválido: {text[:200]}")
+        return None
     except Exception as e:
-        print(f"[ERROR GEMINI] {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"[ERROR GEMINI] {e}")
         return None
 
 def process_image_pipeline(image_bytes):
