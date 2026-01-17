@@ -32,10 +32,12 @@ def health_check():
 
 
 
+from ocr_engine import process_image_pipeline, parse_document_text
+
 @app.post("/extract")
 async def extract_data(request: ExtractRequest):
     try:
-        # Limpar header base64 se existir
+        # Limpar header base64
         if "," in request.image:
             header, encoded = request.image.split(",", 1)
         else:
@@ -43,22 +45,57 @@ async def extract_data(request: ExtractRequest):
             
         image_bytes = base64.b64decode(encoded)
         
-        # Passo 1: Processamento de Imagem com OpenCV
-        # Isso remove o fundo verde/colorido e deixa o texto preto no branco
-        processed_img_array = process_image_cv2(image_bytes)
+        # Obter versoes da imagem
+        images = process_image_pipeline(image_bytes)
         
-        # Passo 2: OCR com Tesseract
-        # Config: --psm 3 (Auto Page Segment), por (Portugues)
-        text = pytesseract.image_to_string(processed_img_array, lang='por', config='--psm 3')
+        # Estratégia de Tentativas (Ensemble)
+        # Ordem de preferencia: Otsu (Mais limpo) -> Grayscale (Mais seguro) -> Adaptive (Agressivo) -> Original
+        strategies = ['otsu', 'gray', 'adaptive', 'original']
         
-        # Passo 3: Parser de Texto
-        extracted = parse_document_text(text)
+        best_result = None
+        best_score = -1
+        last_text = ""
         
+        for strategy in strategies:
+            img_version = images[strategy]
+            
+            # Executar OCR
+            # psm 3 = fully automatic. psm 6 = block of text (as vezes melhor pra cartoes cortados)
+            # Vamos tentar psm 3 padrao.
+            text = pytesseract.image_to_string(img_version, lang='por', config='--psm 3')
+            
+            extracted = parse_document_text(text)
+            
+            # Calcular Score de Qualidade
+            score = 0
+            if extracted['cpf']: score += 3
+            if extracted['nome_provavel']: score += 2
+            if extracted['rg']: score += 1
+            if extracted['data_nascimento']: score += 1
+            if extracted['tipo_documento'] != 'DESCONHECIDO': score += 2
+            
+            print(f"Strategy {strategy}: Score {score}, Len {len(text)}")
+            
+            # Se achou CPF e Nome, é Ouro! Para tudo e retorna.
+            if extracted['cpf'] and extracted['nome_provavel']:
+                return {
+                    "success": True,
+                    "extracted_fields": extracted,
+                    "method": f"PYTHON_{strategy.upper()}_GOLD"
+                }
+            
+            # Senao, guarda o melhor resultado até agora
+            if score > best_score:
+                best_score = score
+                best_result = extracted
+                last_text = text
+                
+        # Se saiu do loop, retorna o "menos pior"
         return {
             "success": True,
-            "extracted_fields": extracted,
-            "raw_text": text, # Opcional, bom pra debug
-            "method": "PYTHON_OPENCV_ADAPTIVE"
+            "extracted_fields": best_result,
+            "raw_text": last_text if len(last_text) < 500 else last_text[:500] + "...",
+            "method": "PYTHON_BEST_EFFORT"
         }
         
     except Exception as e:

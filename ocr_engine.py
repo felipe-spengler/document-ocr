@@ -160,35 +160,35 @@ def is_valid_name(text, blacklist):
     
     return True
 
-def process_image_cv2(image_bytes):
+def process_image_pipeline(image_bytes):
     """
-    Pipeline de processamento de imagem com OpenCV (Nível FIFA)
+    Pipeline que retorna MÚLTIPLAS versões da imagem para tentar OCR.
+    Se uma falhar (texto vazio), tentamos a outra.
     """
-    # Converter bytes para numpy array
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
     if img is None:
         raise ValueError("Falha ao decodificar imagem")
 
-    # 1. Converter para Grayscale
+    # 1. Grayscale (Básico)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    # 2. Remover Ruído (Blur suave)
-    # Ajuda a remover pontilhados da impressão do RG/CNH
-    gray = cv2.medianBlur(gray, 3)
+    # 2. Binarização Otsu (Bom contraste global)
+    # Remove fundo cinza/verde uniforme
+    _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    # 3. Adaptive Threshold (Bom para sombras)
+    # Cuidado: pode gerar ruido se a imagem for muito nitida
+    adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                     cv2.THRESH_BINARY, 11, 2)
+    
+    # 4. Denoised
+    denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
 
-    # 3. Thresholding Adaptativo (O Pulo do Gato)
-    # Em vez de um corte fixo (preto/branco), ele analisa a vizinhança do pixel.
-    # Isso resolve o problema de sombras e fundos coloridos (verde da CNH)
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                   cv2.THRESH_BINARY, 11, 2)
-    
-    # 4. Operações Morfológicas (Opcional, mas ajuda em fontes finas)
-    # kernel = np.ones((1,1), np.uint8)
-    # thresh = cv2.dilate(thresh, kernel, iterations=1)
-    
-    # Opcional: Salvar imagem processada para debug se quiser
-    # cv2.imwrite("debug_processed.png", thresh)
-    
-    return thresh
+    return {
+        "original": img, # Fallback final
+        "gray": gray,    # Seguro
+        "otsu": otsu,    # Alto contraste
+        "adaptive": adaptive # Hardcore
+    }
