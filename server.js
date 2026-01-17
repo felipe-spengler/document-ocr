@@ -8,14 +8,18 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
+app.use(express.static('public')); // Servir arquivos estáticos da pasta public
 // Aumentar o limite para aceitar imagens grandes em Base64
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
-// Rota de Health Check
-app.get('/', (req, res) => {
+// Rota de Health Check (agora em /status, pois / exibe a tela de teste)
+app.get('/status', (req, res) => {
   res.send({ status: 'Online', message: 'API de Documentos ativa' });
 });
+
+// A rota raiz agora serve o index.html automaticamente pelo express.static
+// mas podemos deixar explícito se quisermos (opcional, o static já resolve)
 
 // Endpoint principal para extração
 app.post('/extract', async (req, res) => {

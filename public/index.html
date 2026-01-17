@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de OCR - Documentos</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f4f4f9; color: #333; }
+        h1 { text-align: center; color: #2c3e50; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .upload-area { border: 2px dashed #cbd5e0; border-radius: 8px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 20px; }
+        .upload-area:hover { border-color: #4299e1; background-color: #ebf8ff; }
+        .upload-area p { margin: 0; color: #718096; font-size: 1.1rem; }
+        #preview { max-width: 100%; max-height: 300px; margin-top: 20px; border-radius: 8px; display: none; margin-left: auto; margin-right: auto; }
+        button { width: 100%; background-color: #4299e1; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        button:hover { background-color: #3182ce; }
+        button:disabled { background-color: #a0aec0; cursor: not-allowed; }
+        #result { margin-top: 20px; background: #2d3748; color: #a0aec0; padding: 15px; border-radius: 8px; font-family: monospace; white-space: pre-wrap; display: none; }
+        .loading { display: none; text-align: center; margin-top: 10px; font-weight: bold; color: #4299e1; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; margin-bottom: 10px; font-weight: bold; }
+        .badge-pdf { background-color: #fed7d7; color: #c53030; }
+        .badge-img { background-color: #c6f6d5; color: #2f855a; }
+    </style>
+</head>
+<body>
+
+    <h1>📄 Testador de API de Documentos</h1>
+    
+    <div class="card">
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+            <p>📁 Clique ou arraste um arquivo aqui</p>
+            <p style="font-size: 0.9rem; margin-top: 5px;">(Aceita Imagens ou PDF)</p>
+        </div>
+        <input type="file" id="fileInput" hidden accept="image/*,application/pdf">
+        
+        <div id="fileInfo" style="text-align: center; margin-bottom: 15px; display: none;">
+            <span id="badgeType" class="badge"></span>
+            <span id="fileName"></span>
+        </div>
+
+        <img id="preview" />
+
+        <button id="btnExtract" onclick="processFile()" disabled>🚀 Extrair Dados</button>
+        
+        <div class="loading" id="loading">⌛ Processando... (Isso pode levar alguns segundos)</div>
+
+        <pre id="result"></pre>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const btnExtract = document.getElementById('btnExtract');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+        const fileInfo = document.getElementById('fileInfo');
+        const badgeType = document.getElementById('badgeType');
+        const fileName = document.getElementById('fileName');
+
+        let base64String = "";
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            fileName.textContent = file.name;
+            fileInfo.style.display = 'block';
+            resultDiv.style.display = 'none';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                base64String = e.target.result;
+                btnExtract.disabled = false;
+
+                if (file.type.includes('pdf')) {
+                    preview.style.display = 'none';
+                    badgeType.textContent = "PDF";
+                    badgeType.className = "badge badge-pdf";
+                } else {
+                    preview.src = base64String;
+                    preview.style.display = 'block';
+                    badgeType.textContent = "IMAGEM";
+                    badgeType.className = "badge badge-img";
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+
+        async function processFile() {
+            if (!base64String) return;
+
+            loadingDiv.style.display = 'block';
+            btnExtract.disabled = true;
+            resultDiv.style.display = 'none';
+            resultDiv.textContent = '';
+
+            try {
+                // Determine API URL (assumes same host if running there, or hardcoded for local test)
+                const apiUrl = window.location.origin.includes('localhost') 
+                    ? 'http://localhost:3000/extract' 
+                    : '/extract';
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64String })
+                });
+
+                const data = await response.json();
+                
+                resultDiv.style.display = 'block';
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    resultDiv.style.color = '#68d391'; // Greenish for success
+                } else {
+                    resultDiv.style.color = '#fc8181'; // Red for error
+                }
+
+            } catch (error) {
+                resultDiv.style.display = 'block';
+                resultDiv.style.color = 'red';
+                resultDiv.textContent = 'Erro na requisição: ' + error.message;
+            } finally {
+                loadingDiv.style.display = 'none';
+                btnExtract.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
