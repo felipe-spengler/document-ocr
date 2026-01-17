@@ -26,7 +26,7 @@ function parseDocumentText(text) {
 
     // --- 1. Identificar Tipo de Doc ---
     const textUpper = cleanText.toUpperCase();
-    if (textUpper.includes('HABILITACAO') || textUpper.includes('CONDUTOR') || textUpper.includes('CNH')) {
+    if (textUpper.includes('HABILITACAO') || textUpper.includes('CONDUTOR') || textUpper.includes('CNH') || textUpper.includes('DRIVER') || textUpper.includes('PERMISO')) {
         result.tipo_documento = 'CNH';
     } else if (textUpper.includes('IDENTIDADE') || textUpper.includes('SSP') || textUpper.includes('SECRETARIA')) {
         result.tipo_documento = 'RG';
@@ -54,6 +54,13 @@ function parseDocumentText(text) {
 
     // --- 3. Data de Nascimento ---
     const datePattern = /\d{2}\/\d{2}\/\d{4}/;
+    const allFoundDates = []; // Guardar datas para não confundir com RG
+
+    // Scan inicial de datas
+    for (const line of lines) {
+        const m = line.match(datePattern);
+        if (m) allFoundDates.push(m[0]);
+    }
 
     // Prioridade 1: Linha que tem "NASCIMENTO" ou "NASC"
     for (const line of lines) {
@@ -98,16 +105,25 @@ function parseDocumentText(text) {
     const blacklist = ['REPUBLICA', 'FEDERATIVA', 'BRASIL', 'MINISTERIO', 'IDENTIDADE',
         'CARTEIRA', 'NACIONAL', 'HABILITACAO', 'DETRAN', 'ASSINATURA',
         'VALIDA', 'DATA', 'NOME', 'FILIACAO', 'DOCUMENTO', 'ESTADO',
-        'SECRETARIA', 'CPF', 'GERAL', 'REGISTRO', 'LEI', 'LOCAL', 'VIA'];
+        'SECRETARIA', 'CPF', 'GERAL', 'REGISTRO', 'LEI', 'LOCAL', 'VIA',
+        'SOBRENOME', 'DRIVER', 'LICENSE', 'PERMISO'];
 
     // Procura pela ancora "NOME"
     let nameFound = false;
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].toUpperCase().replace(/[^A-Z\s]/g, '').trim(); // Limpa lixo
-        if (line === 'NOME' || line.startsWith('NOME ')) {
+        // Verificar âncoras comuns de CNH nova e antiga
+        if (line === 'NOME' || line.startsWith('NOME ') || line.includes('NOME E SOBRENOME') || line.includes('NOME SOCIAL')) {
             // O nome deve estar na proxima linha
             if (i + 1 < lines.length) {
-                const candidate = lines[i + 1];
+                let candidate = lines[i + 1];
+                // As vezes o OCR gruda "3 NOME E SOBRENOME FULANO DE TAL"
+                // Se a linha da ancora tiver mais texto, pode ser que o nome esteja nela mesmo
+                if (line.length > 20 && !line.endsWith('SOBRENOME') && !line.endsWith('SOCIAL')) {
+                    // Tentativa arriscada de pegar o nome na mesma linha
+                    // Ignoramos por enquanto para nao pegar lixo
+                }
+
                 if (isValidName(candidate, blacklist)) {
                     result.nome_provavel = candidate;
                     nameFound = true;
@@ -130,6 +146,8 @@ function parseDocumentText(text) {
             const upper = cleanLine.toUpperCase();
             // Ignora se for palavra da blacklist
             if (isBlacklisted(upper, blacklist)) continue;
+            // Evitar pegar palavras soltas perdidas
+            if (cleanLine.split(' ').length < 2) continue; // Nome tem que ter sobrenome
 
             // Se passou por tudo isso, parece um nome
             result.nome_provavel = cleanLine;
@@ -139,7 +157,17 @@ function parseDocumentText(text) {
 
     // --- 5. RG ---
     // Procura padrao de RG, ignorando o CPF ja encontrado
+    // Remove datas encontradas de "potenciais RGs" para evitar confusão de DDMMAAAA
     const rgPattern = /\d{1,2}\.?\d{3}\.?\d{3}-?[\dX]/;
+
+    // Função auxiliar para ver se string é apenas uma data sem barras
+    const isDateString = (str) => {
+        const nums = str.replace(/\D/g, '');
+        if (nums.length !== 8) return false;
+        // Check se existe nas datas encontradas (mesmo com /)
+        return allFoundDates.some(d => d.replace(/\D/g, '') === nums);
+    };
+
     if (!result.rg) {
         for (const line of lines) {
             const lineUp = line.toUpperCase();
@@ -153,6 +181,12 @@ function parseDocumentText(text) {
                 // Verifica se não é o proprio CPF
                 const rawFound = found.replace(/\D/g, '');
                 const rawCpf = result.cpf ? result.cpf.replace(/\D/g, '') : '99999999999';
+
+                // Validacoes extras
+                if (rawFound === rawCpf) continue;
+                if (rawFound.length < 5) continue;
+                if (isDateString(found)) continue; // Evita pegar Validade como RG
+
                 if (rawFound !== rawCpf && rawFound.length >= 5) { // RG costuma ter min 5 digitos
                     result.rg = found;
                     break;
