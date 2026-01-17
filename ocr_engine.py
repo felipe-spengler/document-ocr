@@ -236,6 +236,55 @@ def is_date_loose(s):
     if len(s) == 8 and (s.startswith('19') or s.startswith('20') or s.endswith('19') or s.endswith('20')): return True
     return False
 
+import google.generativeai as genai
+import os
+import json
+
+def extract_with_gemini(image_bytes, api_key):
+    """
+    Usa o Gemini 1.5 Flash (Visão) para extrair dados com precisão humana.
+    Requer chave de API configurada.
+    """
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Carregar imagem para o formato que o Gemini aceita
+        image_parts = [
+            {
+                "mime_type": "image/png", # ou jpeg, o Gemini se vira
+                "data": image_bytes
+            }
+        ]
+        
+        prompt = """
+        Analise este documento brasileiro (CNH ou RG) e extraia os dados em JSON estrito.
+        Campos requeridos:
+        - "nome_provavel": Nome completo.
+        - "cpf": Formato XXX.XXX.XXX-XX (Se não houver, null).
+        - "data_nascimento": DD/MM/AAAA.
+        - "rg": Apenas números (Se não houver, null). Se for CNH, procure o campo 'DOC IDENTIDADE' ou 'REGISTRO'.
+        - "tipo_documento": "CNH" ou "RG".
+        
+        Retorne APENAS o JSON, sem markdown (```json).
+        """
+        
+        response = model.generate_content([prompt, image_parts[0]])
+        text = response.text.strip()
+        
+        # Limpar markdown se houver
+        if text.startswith('```json'): # remove ```json
+             text = text[7:] 
+        if text.endswith('```'): # remove ```
+             text = text[:-3]
+             
+        data = json.loads(text.strip())
+        return data
+        
+    except Exception as e:
+        print(f"Erro Gemini: {e}")
+        return None
+
 def process_image_pipeline(image_bytes):
     """
     Pipeline que retorna MÚLTIPLAS versões da imagem para tentar OCR.

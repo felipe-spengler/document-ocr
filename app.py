@@ -6,33 +6,8 @@ import base64
 import io
 import pytesseract
 from PIL import Image
-from ocr_engine import process_image_pipeline, parse_document_text
-
-app = FastAPI()
-
-# Configuração CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Esquema de Entrada
-class ExtractRequest(BaseModel):
-    image: str # Base64 string
-
-# Servir arquivos estáticos (Frontend)
-app.mount("/static", StaticFiles(directory="public"), name="static")
-
-@app.get("/status")
-def health_check():
-    return {"status": "Online", "backend": "Python/OpenCV"}
-
-
-
-from ocr_engine import process_image_pipeline, parse_document_text
+from ocr_engine import process_image_pipeline, parse_document_text, extract_with_gemini
+import os
 
 @app.post("/extract")
 async def extract_data(request: ExtractRequest):
@@ -45,6 +20,21 @@ async def extract_data(request: ExtractRequest):
             
         image_bytes = base64.b64decode(encoded)
         
+        # --- MODO TURBO: GEMINI AI (Se tiver chave configurada) ---
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if gemini_key:
+            print("Usando Engine: Google Gemini Flash")
+            gemini_result = extract_with_gemini(image_bytes, gemini_key)
+            if gemini_result:
+                return {
+                    "success": True,
+                    "extracted_fields": gemini_result,
+                    "method": "GOOGLE_GEMINI_FLASH_AI"
+                }
+            # Se falhar no Gemini, cai pro fallback local
+            print("Gemini falhou, caindo para Tesseract local...")
+
+        # --- MODO LOCAL: TESSERACT + OPENCV ---
         # Obter versoes da imagem
         images = process_image_pipeline(image_bytes)
         
