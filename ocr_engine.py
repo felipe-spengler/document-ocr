@@ -236,26 +236,20 @@ def is_date_loose(s):
     if len(s) == 8 and (s.startswith('19') or s.startswith('20') or s.endswith('19') or s.endswith('20')): return True
     return False
 
-import google.generativeai as genai
+from google import genai
+from google.genai.types import GenerateContentConfig, Part
 import os
 import json
 import base64
 
 def extract_with_gemini(image_bytes, api_key):
     """
-    Usa o Gemini 1.5 Flash (Visão) para extrair dados com precisão humana.
+    Usa o Gemini (nova SDK) para extrair dados com precisão humana.
     """
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro-vision')
+        client = genai.Client(api_key=api_key)
         
-        # Criar parte da imagem
-        image_part = {
-            'mime_type': 'image/jpeg',
-            'data': base64.b64encode(image_bytes).decode('utf-8')
-        }
-        
-        prompt = """Extraia os dados deste documento em JSON:
+        prompt = """Extraia os dados deste documento brasileiro em JSON:
 {
   "nome_provavel": "nome completo",
   "cpf": "XXX.XXX.XXX-XX ou null",
@@ -263,17 +257,22 @@ def extract_with_gemini(image_bytes, api_key):
   "rg": "apenas números ou null",
   "tipo_documento": "CNH ou RG"
 }
-Retorne APENAS JSON válido, sem explicação."""
+Retorne APENAS JSON válido."""
         
-        response = model.generate_content([prompt, image_part])
+        response = client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=[
+                Part.from_bytes(data=image_bytes, mime_type='image/jpeg'),
+                prompt
+            ]
+        )
+        
         text = response.text.strip()
-        
-        # Limpar markdown
         text = text.replace('```json', '').replace('```', '').strip()
         
         return json.loads(text)
         
-    except json.JSONDecodeError as je:
+    except json.JSONDecodeError:
         print(f"[ERROR] Gemini retornou texto inválido: {text[:200]}")
         return None
     except Exception as e:
