@@ -260,7 +260,7 @@ def extract_with_gemini(image_bytes, api_key):
 Retorne APENAS JSON válido."""
         
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-1.5-flash',
             contents=[
                 Part.from_bytes(data=image_bytes, mime_type='image/jpeg'),
                 prompt
