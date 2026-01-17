@@ -236,7 +236,8 @@ def is_date_loose(s):
     if len(s) == 8 and (s.startswith('19') or s.startswith('20') or s.endswith('19') or s.endswith('20')): return True
     return False
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import os
 import json
 
@@ -246,43 +247,49 @@ def extract_with_gemini(image_bytes, api_key):
     Requer chave de API configurada.
     """
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # Carregar imagem para o formato que o Gemini aceita
-        image_parts = [
-            {
-                "mime_type": "image/png", # ou jpeg, o Gemini se vira
-                "data": image_bytes
-            }
-        ]
+        client = genai.Client(api_key=api_key)
         
         prompt = """
         Analise este documento brasileiro (CNH ou RG) e extraia os dados em JSON estrito.
         Campos requeridos:
-        - "nome_provavel": Nome completo.
-        - "cpf": Formato XXX.XXX.XXX-XX (Se não houver, null).
-        - "data_nascimento": DD/MM/AAAA.
-        - "rg": Apenas números (Se não houver, null). Se for CNH, procure o campo 'DOC IDENTIDADE' ou 'REGISTRO'.
-        - "tipo_documento": "CNH" ou "RG".
+        - "nome_provavel": Nome completo (string).
+        - "cpf": Formato XXX.XXX.XXX-XX. Se não houver, use null.
+        - "data_nascimento": Formato DD/MM/AAAA (string).
+        - "rg": Documento de identidade em string (apenas números). Se for CNH, use o campo 'DOC IDENTIDADE'. Se não houver, use null.
+        - "tipo_documento": "CNH" ou "RG" (string).
         
-        Retorne APENAS o JSON, sem markdown (```json).
+        Retorne APENAS o JSON puro, sem markdown nem código.
+        Exemplo: {"nome_provavel": "FULANO", "cpf": "123.456.789-00", "data_nascimento": "01/01/1990", "rg": "123456789", "tipo_documento": "CNH"}
         """
         
-        response = model.generate_content([prompt, image_parts[0]])
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=[
+                types.Part.from_bytes(
+                    data=image_bytes,
+                    mime_type='image/png'
+                ),
+                prompt
+            ]
+        )
+        
         text = response.text.strip()
         
         # Limpar markdown se houver
-        if text.startswith('```json'): # remove ```json
+        if text.startswith('```json'):
              text = text[7:] 
-        if text.endswith('```'): # remove ```
+        if text.startswith('```'):
+             text = text[3:] 
+        if text.endswith('```'):
              text = text[:-3]
              
         data = json.loads(text.strip())
         return data
         
     except Exception as e:
-        print(f"Erro Gemini: {e}")
+        print(f"[ERROR GEMINI] {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def process_image_pipeline(image_bytes):

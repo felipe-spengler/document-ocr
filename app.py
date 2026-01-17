@@ -32,6 +32,15 @@ app.mount("/static", StaticFiles(directory="public"), name="static")
 def health_check():
     return {"status": "Online", "backend": "Python/OpenCV/Gemini"}
 
+@app.get("/debug/env")
+def debug_env():
+    """Endpoint de debug para verificar se ENV vars estão carregando"""
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    return {
+        "gemini_key_loaded": gemini_key is not None,
+        "gemini_key_preview": f"...{gemini_key[-4:]}" if gemini_key else "NOT_FOUND"
+    }
+
 @app.post("/extract")
 async def extract_data(request: ExtractRequest):
     try:
