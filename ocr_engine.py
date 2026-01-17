@@ -247,7 +247,7 @@ def extract_with_gemini(image_bytes, api_key):
     """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-pro-vision')
         
         # Criar parte da imagem
         image_part = {
