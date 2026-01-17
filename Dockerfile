@@ -1,35 +1,26 @@
-# Usar versão LTS do Node (Debian slim para ter glibc necessário pro Sharp/Tesseract se preciso)
-FROM node:20-slim
+FROM python:3.10-slim
 
-# Instalar dependências de sistema necessárias para o Canvas/Sharp/Tesseract se houver fallback
-# Embora tesseract.js seja WASM, ter as libs de imagem ajuda a compatibilidade
+# Instalar Tesseract e dependências do sistema (OpenCV precisa de libs GL)
 RUN apt-get update && apt-get install -y \
-    python3 \
-    build-essential \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libjpeg-dev \
-    libgif-dev \
-    librsvg2-dev \
+    tesseract-ocr \
+    tesseract-ocr-por \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copiar arquivos de dependência primeiro (cache layer)
-COPY package*.json ./
+# Copiar dependências e instalar
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Instalar dependências (production flag ignora devDependencies)
-RUN npm install --omit=dev
-
-# Copiar o restante do código
+# Copiar código
 COPY . .
 
-# Criar pasta para cache do Tesseract e dar permissão (evita erro de permissão ao baixar lang data)
-RUN mkdir -p .tesseract_cache && chmod 777 .tesseract_cache
-ENV TESSERACT_CACHE_PATH=.tesseract_cache
-
-# Expor a porta
+# Expor porta
 EXPOSE 3000
 
-# Comando de inicialização
-CMD ["npm", "start"]
+# Comando para rodar a API
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "3000"]
