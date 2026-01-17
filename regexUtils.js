@@ -3,15 +3,18 @@
  */
 
 function parseDocumentText(text) {
-    // Melhorar limpeza: substituir múltiplos espaços por um, remover caracteres estranhos resultantes de OCR ruim
-    const cleanText = text
+    // 1. Limpeza Inicial do Texto
+    const safeText = text || '';
+    // Normalizar quebras de linha e remover caracteres muito estranhos
+    const cleanText = safeText
         .replace(/\r\n/g, '\n')
         .replace(/\|/g, 'I') // OCR confunde I com |
-        .replace(/cleanText/g, '') // remove artifact
-        .replace(/[^\x20-\x7E\xA0-\xFF\n]/g, '') // Remove caracteres não imprimíveis bizarros
-        .trim();
+        .replace(/[^a-zA-Z0-9\s\/\.\-\(\)]/g, ' ') // Mantem apenas alfanumerico e pontuacao basica
+        .replace(/\s+/g, ' '); // Remove espacos duplos
 
-    const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const lines = safeText.split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 2); // Linhas muito curtas sao lixo
 
     const result = {
         cpf: null,
@@ -21,146 +24,167 @@ function parseDocumentText(text) {
         tipo_documento: 'DESCONHECIDO'
     };
 
-    // --- Patterns ---
-    const cpfPattern = /\d{3}\.?\d{3}\.?\d{3}-?\d{2}/;
-    // Data: DD/MM/AAAA. Tenta pegar casos com erro de OCR ex: 01/01/199o
-    const datePattern = /\d{2}\/\d{2}\/\d{4}/g;
-
-    // --- 1. Identificar Tipo de Doc (Heurística) ---
+    // --- 1. Identificar Tipo de Doc ---
     const textUpper = cleanText.toUpperCase();
-    if (textUpper.includes('HABILITACAO') || textUpper.includes('CONDUTOR')) {
+    if (textUpper.includes('HABILITACAO') || textUpper.includes('CONDUTOR') || textUpper.includes('CNH')) {
         result.tipo_documento = 'CNH';
     } else if (textUpper.includes('IDENTIDADE') || textUpper.includes('SSP') || textUpper.includes('SECRETARIA')) {
         result.tipo_documento = 'RG';
     }
 
-    // --- 2. CPF ---
-    const cpfMatch = cleanText.match(cpfPattern);
-    if (cpfMatch) {
-        result.cpf = cpfMatch[0].replace(/[^\d]/g, '').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    // --- 2. CPF (Fuzzy Logic) ---
+    // Remove tudo que nao é numero pra tentar achar o padrao de 11 digitos
+    // Mas cuidado pra nao pegar outros numeros.
+    // Melhor usar Regex Flexivel: 3 digitos, separador opcional, etc.
+    // Tenta achar padroes como 123.456.789-00 ou 123 456 789 00
+    const cpfLoosePattern = /(\d{3})[\.\s]?(\d{3})[\.\s]?(\d{3})[-\s]?(\d{2})/;
+
+    // Varre linhas procurando algo que pareça CPF
+    for (const line of lines) {
+        // Limpa a linha de letras comuns que o OCR confunde com números em campos numericos
+        // Ex: O -> 0, B -> 8, S -> 5, I -> 1
+        const lineNums = fuzzyNumberClean(line);
+        const match = lineNums.match(cpfLoosePattern);
+        if (match) {
+            // Validar digitos verificadores poderia ser um passo extra, mas aqui só extraímos
+            result.cpf = `${match[1]}.${match[2]}.${match[3]}-${match[4]}`;
+            break;
+        }
     }
 
     // --- 3. Data de Nascimento ---
-    // Estratégia: Procurar a label "Nascimento" e pegar a data próxima
-    let foundDob = false;
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].toUpperCase();
-        if (line.includes('NASCIMENTO') || line.includes('NASC')) {
-            // Tenta achar data na mesma linha
+    const datePattern = /\d{2}\/\d{2}\/\d{4}/;
+
+    // Prioridade 1: Linha que tem "NASCIMENTO" ou "NASC"
+    for (const line of lines) {
+        const lineUp = line.toUpperCase();
+        if (lineUp.includes('NASCIMENTO') || lineUp.includes('DATA NASC')) {
             const d = line.match(datePattern);
             if (d) {
                 result.data_nascimento = d[0];
-                foundDob = true;
-                break;
+                break; // Achou na linha certa, para!
             }
-            // Tenta achar na proxima linha
+        }
+    }
+
+    // Prioridade 2: Se não achou na label, tenta achar datas e exclui as que sabemos que NÃO são nascimento
+    if (!result.data_nascimento) {
+        let candidates = [];
+        for (const line of lines) {
+            const d = line.match(datePattern);
+            if (d) {
+                const lineUp = line.toUpperCase();
+                // Se a linha tem palavras "proibidas" pra nascimento, ignora
+                if (lineUp.includes('VALIDADE') || lineUp.includes('EXPEDICAO') || lineUp.includes('DOC') || lineUp.includes('PRIMEIRA')) {
+                    continue;
+                }
+                candidates.push(d[0]);
+            }
+        }
+
+        // Se sobrou datas, pega a mais antiga (assumindo que nasc < todas as outras)
+        if (candidates.length > 0) {
+            candidates.sort((a, b) => {
+                const da = new Date(a.split('/').reverse().join('-'));
+                const db = new Date(b.split('/').reverse().join('-'));
+                return da - db;
+            });
+            result.data_nascimento = candidates[0];
+        }
+    }
+
+    // --- 4. Nome ---
+    // O nome é o inferno do OCR. Vamos melhorar a heuristica.
+    const blacklist = ['REPUBLICA', 'FEDERATIVA', 'BRASIL', 'MINISTERIO', 'IDENTIDADE',
+        'CARTEIRA', 'NACIONAL', 'HABILITACAO', 'DETRAN', 'ASSINATURA',
+        'VALIDA', 'DATA', 'NOME', 'FILIACAO', 'DOCUMENTO', 'ESTADO',
+        'SECRETARIA', 'CPF', 'GERAL', 'REGISTRO', 'LEI', 'LOCAL', 'VIA'];
+
+    // Procura pela ancora "NOME"
+    let nameFound = false;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].toUpperCase().replace(/[^A-Z\s]/g, '').trim(); // Limpa lixo
+        if (line === 'NOME' || line.startsWith('NOME ')) {
+            // O nome deve estar na proxima linha
             if (i + 1 < lines.length) {
-                const d2 = lines[i + 1].match(datePattern);
-                if (d2) {
-                    result.data_nascimento = d2[0];
-                    foundDob = true;
+                const candidate = lines[i + 1];
+                if (isValidName(candidate, blacklist)) {
+                    result.nome_provavel = candidate;
+                    nameFound = true;
                     break;
                 }
             }
         }
     }
-    // Fallback Data: Se não achou na label, pega a data mais antiga do documento (Geralmente nasc é mais antigo que expedição)
-    if (!foundDob) {
-        const allDates = cleanText.match(datePattern);
-        if (allDates && allDates.length > 0) {
-            // Parse dates objects
-            const parsedDates = allDates.map(d => {
-                const parts = d.split('/');
-                return { str: d, date: new Date(`${parts[2]}-${parts[1]}-${parts[0]}`) };
-            }).filter(d => !isNaN(d.date));
 
-            // Ordenar por data
-            parsedDates.sort((a, b) => a.date - b.date);
-            if (parsedDates.length > 0) {
-                // A primeira data costuma ser nascimento (anos atrás)
-                result.data_nascimento = parsedDates[0].str;
-            }
-        }
-    }
-
-    // --- 4. Nome ---
-    // Estratégia CNH: Nome está na linho logo abaixo de "NOME"
-    // Estratégia RG: Nome está isolado
-
-    let nameCandidate = null;
-    const blacklist = ['REPUBLICA', 'FEDERATIVA', 'BRASIL', 'MINISTERIO', 'IDENTIDADE',
-        'CARTEIRA', 'NACIONAL', 'HABILITACAO', 'DETRAN', 'ASSINATURA',
-        'VALIDA', 'DATA', 'NOME', 'FILIACAO', 'DOCUMENTO', 'ESTADO',
-        'SECRETARIA', 'CPF', 'GERAL', 'REGISTRO', 'LEI', 'LOCAL'];
-
-    // Tentativa por âncora "NOME" (comum em CNH)
-    const nomeIdx = lines.findIndex(l => l.toUpperCase() === 'NOME' || l.toUpperCase().startsWith('NOME '));
-    if (nomeIdx !== -1 && nomeIdx + 1 < lines.length) {
-        nameCandidate = lines[nomeIdx + 1];
-    }
-
-    // Se falhou, heurística de linha com apenas letras maiúsculas e maior que X chars
-    if (!nameCandidate || isBlacklisted(nameCandidate, blacklist)) {
-        // Percorrer linhas procurando nome provavel
-        // Nomes em docs costumam ser:
-        // - Letras Maiúsculas
-        // - Sem numeros
-        // - Tamanho razoavel (> 3 palavras ajuda a filtrar headers, mas as vezes nome é curto)
-
+    // Heurística de Fallback para Nome (Linhas apenas letras maiusculas)
+    if (!nameFound) {
         for (const line of lines) {
-            if (line.length < 5) continue;
-            if (/\d/.test(line)) continue; // Tem numero? nao é nome
+            const cleanLine = line.trim();
+            // Ignora linhas curtas ou com numeros
+            if (cleanLine.length < 5 || /\d/.test(cleanLine)) continue;
 
-            // Verifica palavras bloqueadas
-            if (isBlacklisted(line, blacklist)) continue;
+            // Ignora se tiver char estranho (indicativo de lixo de ocr: @ # $ %)
+            if (/[^a-zA-Z\s\.]/.test(cleanLine)) continue;
 
-            const words = line.split(/\s+/);
-            if (words.length >= 2) {
-                // Achamos uma linha com 2+ palavras, sem numeros, maiuscula e sem blacklist
-                // Grande chance de ser o nome
-                nameCandidate = line;
-                break;
-            }
+            const upper = cleanLine.toUpperCase();
+            // Ignora se for palavra da blacklist
+            if (isBlacklisted(upper, blacklist)) continue;
+
+            // Se passou por tudo isso, parece um nome
+            result.nome_provavel = cleanLine;
+            break;
         }
     }
-
-    if (nameCandidate) result.nome_provavel = nameCandidate;
 
     // --- 5. RG ---
-    // Tenta pegar o que não é CPF
-    // RG Geralmente tem pontos, mas formato varia muito por estado.
-    // Procura palavra RG ou REGISTRO GERAL e pega numeros proximos? Dificil no OCR.
-    // Melhor pegar regex genérico de "número formatado" que não seja o CPF já extraído.
+    // Procura padrao de RG, ignorando o CPF ja encontrado
+    const rgPattern = /\d{1,2}\.?\d{3}\.?\d{3}-?[\dX]/;
+    if (!result.rg) {
+        for (const line of lines) {
+            const lineUp = line.toUpperCase();
+            // Ignora linhas de CPF ou Data
+            if (lineUp.includes('CPF') || /\d{2}\/\d{2}\/\d{4}/.test(line)) continue;
 
-    // Regex generica para formatos de RG: X.XXX.XXX-X ou XX.XXX.XXX-X ...
-    const rgLoosePattern = /\d{1,2}\.?\d{3}\.?\d{3}-?[\dX]/g;
-    const potentialRGs = cleanText.match(rgLoosePattern);
-
-    if (potentialRGs) {
-        // Filtrar o que é igual ao CPF extraido
-        const cleanCPF = result.cpf ? result.cpf.replace(/\D/g, '') : '99999999999';
-
-        const validRGs = potentialRGs.filter(r => {
-            const nums = r.replace(/\D/g, '');
-            // Ignora se for igual ao CPF
-            if (nums === cleanCPF) return false;
-            // Ignora se for muito pequeno ou muito grande (RG tem media 8 a 10 digitos?)
-            if (nums.length < 5 || nums.length > 13) return false;
-            return true;
-        });
-
-        if (validRGs.length > 0) {
-            result.rg = validRGs[0];
+            const nums = fuzzyNumberClean(line);
+            const match = nums.match(rgPattern);
+            if (match) {
+                const found = match[0];
+                // Verifica se não é o proprio CPF
+                const rawFound = found.replace(/\D/g, '');
+                const rawCpf = result.cpf ? result.cpf.replace(/\D/g, '') : '99999999999';
+                if (rawFound !== rawCpf && rawFound.length >= 5) { // RG costuma ter min 5 digitos
+                    result.rg = found;
+                    break;
+                }
+            }
         }
     }
 
     return result;
 }
 
+// Converte letras parecidas com numeros para numeros (Só usar onde esperamos numeros!)
+function fuzzyNumberClean(text) {
+    return text.toUpperCase()
+        .replace(/O/g, '0')
+        .replace(/I/g, '1')
+        .replace(/L/g, '1')
+        .replace(/S/g, '5')
+        .replace(/B/g, '8')
+        .replace(/A/g, '4') // As vezes acontece
+        .replace(/G/g, '6');
+}
+
 function isBlacklisted(str, list) {
-    if (!str) return true;
-    const upper = str.toUpperCase();
-    return list.some(word => upper.includes(word));
+    return list.some(word => str.includes(word));
+}
+
+function isValidName(str, blacklist) {
+    if (!str || str.length < 4) return false;
+    if (/\d/.test(str)) return false; // Nomes nao tem numeros
+    if (isBlacklisted(str.toUpperCase(), blacklist)) return false;
+    return true;
 }
 
 module.exports = { parseDocumentText };
