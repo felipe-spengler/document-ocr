@@ -291,16 +291,17 @@
                                 <div class="field-value ${!fields.nome_provavel ? 'empty' : ''}">${fields.nome_provavel || 'Não encontrado'}</div>
                             </div>
                             <div class="field">
-                                <div class="field-label">CPF</div>
-                                <div class="field-value ${!fields.cpf ? 'empty' : ''}">${fields.cpf || 'Não encontrado'}</div>
+                                <div class="field-label">Documento</div>
+                                <div class="field-value ${(!fields.cpf && !fields.rg) ? 'empty' : ''}">
+                                    ${[
+                                        fields.cpf ? `CPF: ${fields.cpf}` : null, 
+                                        fields.rg ? `RG: ${fields.rg}` : null
+                                    ].filter(Boolean).join(' | ') || 'Não encontrado'}
+                                </div>
                             </div>
                             <div class="field">
                                 <div class="field-label">Data de Nascimento</div>
                                 <div class="field-value ${!fields.data_nascimento ? 'empty' : ''}">${fields.data_nascimento || 'Não encontrado'}</div>
-                            </div>
-                            <div class="field">
-                                <div class="field-label">RG / Documento</div>
-                                <div class="field-value ${!fields.rg ? 'empty' : ''}">${fields.rg || 'Não encontrado'}</div>
                             </div>
                             <div class="field">
                                 <div class="field-label">Tipo de Documento</div>
